@@ -1,0 +1,635 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xbackups.aws.caas.upbound.io
+spec:
+  compositeTypeRef:
+    apiVersion: aws.caas.upbound.io/v1alpha1
+    kind: XBackup
+  patchSets:
+    - name: Name
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+    - name: providerConfigRef
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+    - name: deletionPolicy
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.deletionPolicy
+          toFieldPath: spec.deletionPolicy
+    - name: region
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.region
+    - name: userTags
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.tags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            mergeOptions:
+              appendSlice: true
+              keepMapValues: false
+  resources:
+    - name: irsa-role
+      base:
+        apiVersion: aws.caas.upbound.io/v1alpha1
+        kind: XIRSA
+        spec:
+          parameters:
+            condition: StringEquals
+            serviceAccount:
+              name: velero-sa
+              namespace: velero
+      patches:
+        - fromFieldPath: spec.parameters.providerConfigName
+          toFieldPath: spec.parameters.providerConfigName
+        - fromFieldPath: spec.parameters.deletionPolicy
+          toFieldPath: spec.parameters.deletionPolicy
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-s3-velero-service"
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: spec.parameters.id
+        - type: CombineFromComposite
+          combine:
+            variables:
+            - fromFieldPath: spec.parameters.id
+            strategy: string
+            string:
+              fmt: |
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "ec2:DescribeVolumes",
+                          "ec2:DescribeSnapshots",
+                          "ec2:CreateTags",
+                          "ec2:CreateVolume",
+                          "ec2:CreateSnapshot",
+                          "ec2:DeleteSnapshot"
+                      ],
+                      "Resource": "*"
+                  },
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "s3:GetObject",
+                          "s3:DeleteObject",
+                          "s3:PutObject",
+                          "s3:AbortMultipartUpload",
+                          "s3:ListMultipartUploadParts"
+                      ],
+                      "Resource": [
+                          "arn:aws:s3:::s3-velero-service-%s/*"
+                      ]
+                  },
+                  {
+                      "Effect": "Allow",
+                      "Action": [
+                          "s3:ListBucket"
+                      ],
+                      "Resource": [
+                          "arn:aws:s3:::s3-velero-*"
+                      ]
+                  }
+                  ]
+                }
+          toFieldPath: spec.parameters.policyDocument
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.roleArn
+          toFieldPath: status.backup.roleArn
+          policy:
+            fromFieldPath: Optional
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.roleArn
+          toFieldPath: status.backup.accountId
+          transforms:
+            - type: string
+              string:
+                type: Regexp
+                regexp:
+                  match: '::(\d+):' 
+                  group: 1
+
+    - name: bucket-base
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: Bucket
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - type: PatchSet
+          patchSetName: userTags
+        - fromFieldPath: spec.parameters.forceDestroy
+          toFieldPath: spec.forProvider.forceDestroy
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.id
+          toFieldPath: status.backup.bucketName
+          policy:
+            fromFieldPath: Optional
+
+    - name: bucket-ownership
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketOwnershipControls
+        spec:
+          forProvider:
+            rule:
+              - objectOwnership: BucketOwnerPreferred
+            bucketSelector:
+              matchControllerRef: true
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: bucket-acl
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketACL
+        spec:
+          forProvider:
+            acl: private
+            bucketSelector:
+              matchControllerRef: true
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: bucket-policy
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketPolicy
+        spec:
+          forProvider:
+            bucketSelector:
+              matchControllerRef: true
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+        - type: CombineFromComposite
+          combine:
+            variables:
+            - fromFieldPath: status.backup.roleArn
+            - fromFieldPath: status.backup.bucketName
+            - fromFieldPath: status.backup.bucketName
+            - fromFieldPath: status.backup.bucketName
+            strategy: string
+            string:
+              fmt: |
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Sid": "RWD access for velero operator",
+                      "Effect": "Allow",
+                      "Principal": {
+                        "AWS": [
+                          "%s"
+                        ]
+                      },
+                      "Action": [
+                          "s3:PutObjectAcl",
+                          "s3:PutObject",
+                          "s3:DeleteObject",
+                          "s3:ListBucket",
+                          "s3:GetObject"
+                      ],
+                      "Resource": [
+                          "arn:aws:s3:::%s/*",
+                          "arn:aws:s3:::%s"
+                      ]
+                    },
+                    {
+                      "Sid": "Deny SSE-S3",
+                      "Effect": "Deny",
+                      "Principal": "*",
+                      "Action": "s3:PutObject",
+                      "Resource": "arn:aws:s3:::%s/*",
+                      "Condition": {
+                        "StringEquals": {
+                          "s3:x-amz-server-side-encryption": "AES256"
+                        }
+                      }^
+                    }
+                  ]
+                }
+          toFieldPath: spec.forProvider.policy
+          policy:
+            fromFieldPath: Required
+
+    - name: bucket-publicaccessblock
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketPublicAccessBlock
+        spec:
+          forProvider:
+            blockPublicAcls: true
+            blockPublicPolicy: true
+            ignorePublicAcls: true
+            restrictPublicBuckets: true
+            bucketSelector:
+              matchControllerRef: true
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: bucket-payment
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketRequestPaymentConfiguration
+        spec:
+          forProvider:
+            bucketSelector:
+              matchControllerRef: true
+            payer: BucketOwner
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: bucket-versioning
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketVersioning
+        spec:
+          forProvider:
+            bucketSelector:
+              matchControllerRef: true
+            versioningConfiguration:
+              - status: Enabled
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: bucket-lifecycle
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketLifecycleConfiguration
+        spec:
+          forProvider:
+            bucketSelector:
+              matchControllerRef: true
+            rule:
+              - noncurrentVersionTransition:
+                - noncurrentDays: 365
+                  storageClass: STANDARD_IA
+                status: Enabled
+                id: velero
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: cmk-kms
+      base:
+        apiVersion: kms.aws.upbound.io/v1beta1
+        kind: Key
+        spec:
+          forProvider:
+            deletionWindowInDays: 30
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - type: PatchSet
+          patchSetName: userTags
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: spec.forProvider.description
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s kms key"
+        - type: CombineFromComposite
+          combine:
+            variables:
+            - fromFieldPath: status.backup.accountId
+            - fromFieldPath: status.backup.roleArn
+            strategy: string
+            string:
+              fmt: |
+                {
+                  "Version": "2012-10-17",
+                  "Statement": [
+                    {
+                      "Sid": "Enable IAM User Permissions",
+                      "Effect": "Allow",
+                      "Principal": {
+                        "AWS": "arn:aws:iam::%s:root"
+                      },
+                      "Action": "kms:*",
+                      "Resource": "*"
+                    },
+                    {
+                      "Sid": "Decrypt encrypt access for s3 velero bucket",
+                      "Effect": "Allow",
+                      "Principal": {
+                        "AWS": [
+                          "%s"
+                        ]
+                      },
+                      "Action": [
+                        "kms:Decrypt",
+                        "kms:Encrypt", 
+                        "kms:ReEncrypt*", 
+                        "kms:GenerateDataKey*", 
+                        "kms:DescribeKey"
+                      ],
+                      "Resource": "*"
+                    }
+                  ]
+                }
+          toFieldPath: spec.forProvider.policy
+
+    - name: cmk-kms-alias
+      base:
+        apiVersion: kms.aws.upbound.io/v1beta1
+        kind: Alias
+        spec:
+          forProvider:
+            targetKeyIdSelector:
+              matchControllerRef: true
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: s3-encryption
+      base:
+        apiVersion: s3.aws.upbound.io/v1beta1
+        kind: BucketServerSideEncryptionConfiguration
+        spec:
+          forProvider:
+            bucketSelector:
+              matchControllerRef: true
+            rule:
+              - applyServerSideEncryptionByDefault:
+                  - kmsMasterKeyIdSelector:
+                      matchControllerRef: true
+                    sseAlgorithm: aws:kms
+                bucketKeyEnabled: true
+      patches:
+        - type: PatchSet
+          patchSetName: providerConfigRef
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - type: PatchSet
+          patchSetName: region
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: metadata.name
+          transforms:
+            - type: string
+              string:
+                fmt: "s3-velero-service-%s"
+
+    - name: velero-chart
+      base:
+        apiVersion: helm.crossplane.io/v1beta1
+        kind: Release
+        spec:
+          forProvider:
+            namespace: velero
+            chart:
+              name: velero
+              repository: https://vmware-tanzu.github.io/helm-charts
+              version: 5.0.2
+            values:
+              serviceAccount:
+                server:
+                  create: true
+                  name: velero-sa
+              initContainers:
+                - name: velero-plugin-for-aws
+                  image: velero/velero-plugin-for-aws:v1.5.0
+                  imagePullPolicy: IfNotPresent
+                  volumeMounts:
+                    - mountPath: /target
+                      name: plugins
+              upgradeCRDs: true
+              cleanUpCRDs: false
+              configuration:
+                backupStorageLocation:
+                  - name: velero-backup-default
+                    provider: aws
+                    default: true
+                volumeSnapshotLocation:
+                  - name: velero-volume-default
+                    provider: aws
+                features: EnableAPIGroupVersions
+              credentials:
+                useSecret: false
+              schedules:
+                hourly:
+                  schedule: "@every 1h"
+                  template:
+                    ttl: "48h"
+                    includeClusterResources: true
+                    snapshotVolumes: false
+                    excludedNamespaces:
+                      - kube-node-lease
+                      - kube-system
+                      - kube-public
+                      - velero
+                    excludedResources:
+                      - bindings
+                      - componentstatuses
+                      - cronjobs
+                      - daemonsets
+                      - deployments
+                      - endpoints
+                      - jobs
+                      - limitranges
+                      - nodes
+                      - persistentvolume
+                      - persistentvolumeclaims
+                      - pods
+                      - podtemplates
+                      - replicasets
+                      - replicationcontrollers
+                      - resourcequotas
+                      - services
+                      - statefulsets
+                daily:
+                  schedule: "@every 24h"
+                  template:
+                    ttl: "720h"
+                    includeClusterResources: true
+                    snapshotVolumes: false
+                    excludedNamespaces:
+                      - kube-node-lease
+                      - kube-system
+                      - kube-public
+                      - velero
+                    excludedResources:
+                      - bindings
+                      - componentstatuses
+                      - cronjobs
+                      - daemonsets
+                      - deployments
+                      - endpoints
+                      - jobs
+                      - limitranges
+                      - nodes
+                      - persistentvolume
+                      - persistentvolumeclaims
+                      - pods
+                      - podtemplates
+                      - replicasets
+                      - replicationcontrollers
+                      - resourcequotas
+                      - services
+                      - statefulsets
+                monthly:
+                  schedule: "@monthly"
+                  template:
+                    ttl: "8760h"
+                    includeClusterResources: true
+                    snapshotVolumes: false
+                    excludedNamespaces:
+                      - kube-node-lease
+                      - kube-system
+                      - kube-public
+                      - velero
+                    excludedResources:
+                      - bindings
+                      - componentstatuses
+                      - cronjobs
+                      - daemonsets
+                      - deployments
+                      - endpoints
+                      - jobs
+                      - limitranges
+                      - nodes
+                      - persistentvolume
+                      - persistentvolumeclaims
+                      - pods
+                      - podtemplates
+                      - replicasets
+                      - replicationcontrollers
+                      - resourcequotas
+                      - services
+                      - statefulsets
+      patches:
+        - type: PatchSet
+          patchSetName: deletionPolicy
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: spec.providerConfigRef.name
+        - fromFieldPath: status.backup.roleArn
+          toFieldPath: spec.forProvider.values.serviceAccount.server.annotations[eks.amazonaws.com/role-arn]
+          policy:
+            fromFieldPath: Required
+        - fromFieldPath: status.backup.bucketName
+          toFieldPath: spec.forProvider.values.configuration.backupStorageLocation[0].bucket
+          policy:
+            fromFieldPath: Required
+        - fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.values.configuration.backupStorageLocation[0].config.region
+        - fromFieldPath: spec.parameters.region
+          toFieldPath: spec.forProvider.values.configuration.volumeSnapshotLocation[0].config.region

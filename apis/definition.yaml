@@ -1,0 +1,73 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xbackups.aws.caas.upbound.io
+  labels:
+    provider: aws
+spec:
+  group: aws.caas.upbound.io
+  names:
+    kind: XBackup
+    plural: xbackups
+  claimNames:
+    kind: Backup
+    plural: backups
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                description: Backup configuration parameters.
+                properties:
+                  id:
+                    type: string
+                    description: ID of this Cluster to enable Backup Controller
+                  region:
+                    type: string
+                    description: Region is the region you'd like your resource to be created in.
+                  forceDestroy:
+                    type: boolean
+                    default: false
+                    description: Boolean that indicates all objects (including any
+                      locked objects) should be deleted from the backup bucket when the bucket
+                      is destroyed so that the bucket can be destroyed without error.
+                      These objects are not recoverable. This only deletes objects
+                      when the bucket is destroyed, not when setting this parameter
+                      to true. If setting this field in the same operation that would
+                      require replacing the bucket or destroying the bucket, this
+                      flag will not work.
+                  deletionPolicy:
+                    description: When the Composition is deleleted, delelete the AWS resources. Defaults to Delete
+                    enum:
+                    - Delete
+                    - Orphan
+                    type: string
+                    default: Delete
+                  providerConfigName:
+                    description: Crossplane ProviderConfig to use for provisioning this resources
+                    type: string
+                    default: default
+                  tags:
+                    description: Map of additional AWS Tags to add to all resources
+                    additionalProperties:
+                      type: string
+                    type: object
+                required:
+                - id
+            required:
+            - parameters
+          status:
+            type: object
+            properties:
+              backup:
+                description: Freeform field containing status information for backup-controller
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
