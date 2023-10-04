@@ -261,7 +261,7 @@ spec:
                         "StringEquals": {
                           "s3:x-amz-server-side-encryption": "AES256"
                         }
-                      }^
+                      }
                     }
                   ]
                 }
