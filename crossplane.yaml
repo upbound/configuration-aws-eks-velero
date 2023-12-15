@@ -1,25 +1,25 @@
 apiVersion: meta.pkg.crossplane.io/v1
 kind: Configuration
 metadata:
-  name: configuration-backup-controller
+  name: configuration-aws-eks-velero
   annotations:
-    meta.crossplane.io/maintainer: The configuration-backup-controller Configuration
-    meta.crossplane.io/source: github.com/upbound/configuration-backup-controller
+    meta.crossplane.io/maintainer: The configuration-aws-eks-velero Configuration
+    meta.crossplane.io/source: github.com/upbound/configuration-aws-eks-velero
     meta.crossplane.io/license: Apache-2.0
     meta.crossplane.io/description: |
-      This configuration-backup-controller provides Kubernetes backup functionality.
+      This configuration-aws-eks-velero provides backup functionality.
     meta.crossplane.io/readme: |
       This configuration combines an Upbound Cloud extension with an API definition.
       The API enables control planes to create fully configured Kubernetes Service clusters,
       incorporating cloud service components from the Upbound Official Providers,
-      and includes the option for Kubernetes backup functionality.  
+      and includes the option for backup functionality.  
 spec:
   crossplane:
-    version: ">=v1.12.1-0"
+    version: ">=v1.13.2-0"
   dependsOn:
-    - configuration: xpkg.upbound.io/upbound/configuration-caas
-      version: ">=v0.2.0"
+    - configuration: xpkg.upbound.io/upbound/configuration-aws-eks-irsa
+      version: "v0.2.0"
     - provider: xpkg.upbound.io/upbound/provider-aws-s3
-      version: ">=v0.38.0"
+      version: "v0.43.0"
     - provider: xpkg.upbound.io/upbound/provider-aws-kms
-      version: ">=v0.38.0"
+      version: "v0.43.0"
