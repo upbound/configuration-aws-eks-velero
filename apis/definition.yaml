@@ -1,11 +1,11 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xbackups.aws.caas.upbound.io
+  name: xbackups.aws.platformref.upbound.io
   labels:
     provider: aws
 spec:
-  group: aws.caas.upbound.io
+  group: aws.platformref.upbound.io
   names:
     kind: XBackup
     plural: xbackups

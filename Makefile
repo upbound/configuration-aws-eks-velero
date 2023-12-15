@@ -1,5 +1,5 @@
 # Project Setup
-PROJECT_NAME := configuration-backup-controller
+PROJECT_NAME := configuration-aws-eks-velero
 PROJECT_REPO := github.com/upbound/$(PROJECT_NAME)
 
 # NOTE(hasheddan): the platform is insignificant here as Configuration package
@@ -11,9 +11,11 @@ PLATFORMS ?= linux_amd64
 # ====================================================================================
 # Setup Kubernetes tools
 
+# set UXP_VERSION because of https://github.com/crossplane/crossplane/issues/5055
+UXP_VERSION = 1.13.2-up.2
 UP_VERSION = v0.19.1
 UP_CHANNEL = stable
-UPTEST_VERSION = v0.5.0
+UPTEST_VERSION = v0.8.0
 -include build/makelib/k8s_tools.mk
 # ====================================================================================
 # Setup XPKG
@@ -22,7 +24,7 @@ UPTEST_VERSION = v0.5.0
 # certain conventions such as the default examples root or package directory.
 XPKG_DIR = $(shell pwd)
 XPKG_EXAMPLES_DIR = .up/examples
-XPKG_IGNORE = .github/workflows/ci.yaml,.github/workflows/tag.yml,.github/workflows/e2e.yaml,.up/examples/aws/*.yaml,.work/uptest-datasource.yaml
+XPKG_IGNORE = .github/workflows/ci.yaml,.github/workflows/tag.yml,.github/workflows/e2e.yaml,examples/*.yaml,.work/uptest-datasource.yaml
 
 XPKG_REG_ORGS ?= xpkg.upbound.io/upbound
 # NOTE(hasheddan): skip promoting on xpkg.upbound.io as channel tags are
@@ -32,6 +34,7 @@ XPKGS = $(PROJECT_NAME)
 -include build/makelib/xpkg.mk
 
 CROSSPLANE_NAMESPACE = upbound-system
+CROSSPLANE_ARGS = "--enable-usages"
 -include build/makelib/local.xpkg.mk
 -include build/makelib/controlplane.mk
 
@@ -67,7 +70,7 @@ build.init: $(UP)
 #   You can check the basic implementation here: https://github.com/upbound/uptest/blob/main/internal/templates/01-delete.yaml.tmpl.
 uptest: $(UPTEST) $(KUBECTL) $(KUTTL)
 	@$(INFO) running automated tests
-	@KUBECTL=$(KUBECTL) KUTTL=$(KUTTL) $(UPTEST) e2e "${UPTEST_EXAMPLE_LIST}" --setup-script=test/setup.sh --default-timeout=3200 || $(FAIL)
+	@KUBECTL=$(KUBECTL) KUTTL=$(KUTTL) $(UPTEST) e2e examples/network-xr.yaml,examples/eks-xr.yaml,examples/backup.yaml --setup-script=test/setup.sh --default-timeout=3200 || $(FAIL)
 	@$(OK) running automated tests
 
 # This target requires the following environment variables to be set:

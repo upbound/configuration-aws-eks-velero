@@ -1,0 +1,20 @@
+apiVersion: aws.platformref.upbound.io/v1alpha1
+kind: Backup
+metadata:
+  name: configuration-aws-eks-velero
+  namespace: default
+spec:
+  parameters:
+    id: configuration-aws-eks-velero
+    region: us-west-2
+    # Boolean that indicates all objects (including any
+    # locked objects) should be deleted from the backup bucket when the bucket
+    # is destroyed so that the bucket can be destroyed without error.
+    # These objects are not recoverable. This only deletes objects
+    # when the bucket is destroyed, not when setting this parameter
+    # to true. If setting this field in the same operation that would
+    # require replacing the bucket or destroying the bucket, this
+    # flag will not work.
+    forceDestroy: true
+    tags:
+      Owner: platform-team

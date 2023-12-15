@@ -1,10 +1,10 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: Composition
 metadata:
-  name: xbackups.aws.caas.upbound.io
+  name: xbackups.aws.platformref.upbound.io
 spec:
   compositeTypeRef:
-    apiVersion: aws.caas.upbound.io/v1alpha1
+    apiVersion: aws.platformref.upbound.io/v1alpha1
     kind: XBackup
   patchSets:
     - name: Name
@@ -39,7 +39,7 @@ spec:
   resources:
     - name: irsa-role
       base:
-        apiVersion: aws.caas.upbound.io/v1alpha1
+        apiVersion: aws.platform.upbound.io/v1alpha1
         kind: XIRSA
         spec:
           parameters:
@@ -494,6 +494,7 @@ spec:
         apiVersion: helm.crossplane.io/v1beta1
         kind: Release
         spec:
+          deletionPolicy: Orphan
           forProvider:
             namespace: velero
             chart:
@@ -633,3 +634,22 @@ spec:
           toFieldPath: spec.forProvider.values.configuration.backupStorageLocation[0].config.region
         - fromFieldPath: spec.parameters.region
           toFieldPath: spec.forProvider.values.configuration.volumeSnapshotLocation[0].config.region
+
+    - name: usageXEksByVeleroChart
+      base:
+        apiVersion: apiextensions.crossplane.io/v1alpha1
+        kind: Usage
+        spec:
+          of:
+            apiVersion: aws.platform.upbound.io/v1alpha1
+            kind: XEKS
+          by:
+            apiVersion: helm.crossplane.io/v1beta1
+            kind: Release
+            resourceSelector:
+              matchControllerRef: true
+      readinessChecks:
+        - type: None
+      patches:
+        - fromFieldPath: spec.parameters.id
+          toFieldPath: spec.of.resourceSelector.matchLabels.name
