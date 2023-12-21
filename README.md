@@ -99,10 +99,21 @@ Installation instructions vary depending on your operating system. Follow the in
 
 ### Create Manual Backup
 
-Create a backup of the crossplane controlplane. Be sure your kubectl context is set to the crossplane controlplane before running the command below.
+Create a backup of the crossplane controlplane. Be sure your
+kubectl context is set to the crossplane controlplane before
+running the command below.
+
+Triggering a backup as shown below may include items
+that will already exist on the cluster where the backup will be
+restored. These items can be skipped during restore. Consult the
+[Velero backup reference documentation](https://velero.io/docs/v1.12/resource-filtering/#--exclude-resources)
+for available inclusion and exclusion options.
+Crossplane managed resources are cluster scoped. Indicating
+the `--include-cluster-resources=true` will ensure their
+inclusion in the backup.
 
 ```bash
-velero backup create uxp-backup
+velero backup create uxp-backup --include-cluster-resources=true
 Backup request "uxp-backup" submitted successfully.
 Run `velero backup describe uxp-backup` or `velero backup logs uxp-backup` for more details.
 ```
@@ -131,7 +142,7 @@ Namespaces:
 Resources:
   Included:        *
   Excluded:        <none>
-  Cluster-scoped:  auto
+  Cluster-scoped:  included
 
 Label selector:  <none>
 
@@ -179,15 +190,24 @@ aws s3 ls s3-velero-service-configuration-aws-eks-velero/backups/uxp-backup/
 ```
 ### Create manual Restore
 
-Use the following command to restore only the upbound-system namespace - Note: this will not include cluster scoped resources like XRDs, Compositions
+Use the following command to restore only the upbound-system namespace - Note:
+this will not include cluster scoped resources like XRDs, Compositions
+unless specified.
 
 ```bash
 velero restore create uxp-restore \
     --from-backup uxp-backup \
-    --include-namespaces upbound-system
+    --include-namespaces upbound-system,default \
+    --include-cluster-resources
 Restore request "uxp-restore" submitted successfully.
 Run `velero restore describe uxp-restore` or `velero restore logs uxp-restore` for more details.
 ```
+
+When backups include items that exist on the restore cluster
+there is an option to specify `--existing-resource-policy none`
+for the restore command to skip them. Consult the
+[Velero restore reference](https://velero.io/docs/v1.12/restore-reference/)
+for more information.
 
 #### Validate the restore was successful
 Let’s check on the status of the restore and validate that the restore has been completed successfully.
@@ -214,16 +234,16 @@ Warnings:
   Namespaces:
     upbound-system:  *
 
-Backup:  uxp-backup-2
+Backup:  uxp-backup
 
 Namespaces:
-  Included:  upbound-system
+  Included:  upbound-system, default
   Excluded:  <none>
 
 Resources:
   Included:        *
   Excluded:        nodes, events, events.events.k8s.io, backups.velero.io, restores.velero.io, resticrepositories.velero.io, csinodes.storage.k8s.io, volumeattachments.storage.k8s.io, backuprepositories.velero.io
-  Cluster-scoped:  auto
+  Cluster-scoped:  included
 
 Namespace mappings:  <none>
 
