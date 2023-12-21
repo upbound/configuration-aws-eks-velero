@@ -106,10 +106,10 @@ running the command below.
 Triggering a backup as shown below may include items
 that will already exist on the cluster where the backup will be
 restored. These items can be skipped during restore. Consult the
-[Velero backup reference documentation](https://velero.io/docs/v1.12/resource-filtering/#--exclude-resources)
+[Velero backup reference documentation](https://velero.io/docs/v1.8/backup-reference/)
 for available inclusion and exclusion options.
 Crossplane managed resources are cluster scoped. Indicating
-the `--include-cluster-resources=true` will ensure their
+the `--include-cluster-resources` will ensure their
 inclusion in the backup.
 
 ```bash
@@ -190,9 +190,20 @@ aws s3 ls s3-velero-service-configuration-aws-eks-velero/backups/uxp-backup/
 ```
 ### Create manual Restore
 
-Use the following command to restore only the upbound-system namespace - Note:
+Use the following command to restore only the upbound-system and
+default namespace - Note:
 this will not include cluster scoped resources like XRDs, Compositions
 unless specified.
+
+Scale Crossplane and provider pods down prior to the restore.
+```bash
+kubectl -n upbound-system get deployments —-no-headers|\
+    awk '{print $1}'|\
+    while read pod;\
+    do kubectl -n upbound-system scale \
+        --replicas=0 deployment/$pod;\
+    done
+```
 
 ```bash
 velero restore create uxp-restore \
@@ -201,6 +212,16 @@ velero restore create uxp-restore \
     --include-cluster-resources
 Restore request "uxp-restore" submitted successfully.
 Run `velero restore describe uxp-restore` or `velero restore logs uxp-restore` for more details.
+```
+
+Scale Crossplane and provider pods up after the restore concluded.
+```bash
+kubectl -n upbound-system get deployments —-no-headers|\
+    awk '{print $1}'|\
+    while read pod;\
+    do kubectl -n upbound-system scale \
+        --replicas=0 deployment/$pod;\
+    done
 ```
 
 When backups include items that exist on the restore cluster
