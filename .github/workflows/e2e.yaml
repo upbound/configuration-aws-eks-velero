@@ -3,11 +3,13 @@ name: End to End Testing
 on:
   issue_comment:
     types: [created]
-
+  pull_request:
+    types: [labeled]
 jobs:
   e2e:
-    uses: upbound/uptest/.github/workflows/pr-comment-trigger.yml@main
+    uses: upbound/official-providers-ci/.github/workflows/pr-comment-trigger.yml@main
     with:
       package-type: configuration
     secrets:
       UPTEST_CLOUD_CREDENTIALS: ${{ secrets.UPTEST_CLOUD_CREDENTIALS }}
+      UPTEST_DATASOURCE: ${{ secrets.UPTEST_DATASOURCE }}
