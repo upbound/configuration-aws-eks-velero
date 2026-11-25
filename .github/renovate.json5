@@ -1,0 +1,77 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    'config:recommended',
+    'helpers:pinGitHubActionDigests',
+    ':semanticCommits',
+  ],
+  rebaseWhen: 'auto',
+  rebaseLabel: 'rebase',
+  prConcurrentLimit: 5,
+  autoApprove: true,
+  automerge: true,
+  automergeType: 'pr',
+  baseBranches: [
+    'main',
+  ],
+  labels: [
+    'automated',
+    'run-e2e-tests',
+  ],
+  ignorePaths: [ // default renovate ignorePaths without '**/examples/**'
+    '**/node_modules/**',
+    '**/bower_components/**',
+    '**/vendor/**',
+    '**/__tests__/**',
+    '**/test/**',
+    '**/tests/**',
+    '**/__fixtures__/**',
+    // Synced from upbound/sa-up (gitops/shared-files). Renovate bumps them there
+    // (including the tool versions in the Makefile); bumping them here too gets
+    // overwritten (and looks like a downgrade) on the next sync.
+    '.github/workflows/ci.yaml',
+    '.github/workflows/e2e.yaml',
+    '.github/workflows/tag.yml',
+    '.github/workflows/yamllint.yaml',
+    'Makefile',
+  ],
+  crossplane: {
+    fileMatch: ['(^|/)examples/.*\\.ya?ml$']
+  },
+  packageRules: [
+    {
+      matchFileNames: [
+        '.github/**',
+      ],
+      groupName: 'github-actions dependencies',
+    },
+    {
+      matchFileNames: [
+        'crossplane.yaml',
+      ],
+      groupName: 'crossplane dependencies',
+    },
+    {
+      matchManagers: ['crossplane'],
+      matchFileNames: ['examples/**'],
+      groupName: 'examples'
+    },
+  ],
+  customManagers: [
+    {
+      customType: 'regex',
+      description: 'Bump providers/functions/configurations in crossplane.yaml',
+      fileMatch: [
+        'crossplane.yaml',
+      ],
+      matchStrings: [
+        '#\\s*renovate:\\s*datasource=(?<datasource>[^\\s]+)\\s+depName=(?<depName>[^\\s]+)\\s*\\n\\s*version:\\s*"(?<currentValue>[^"]+)"',
+      ],
+      datasourceTemplate: '{{{datasource}}}',
+      depNameTemplate: '{{{depName}}}',
+    },
+  ],
+  "git-submodules": {
+     "enabled": true
+  }
+}
